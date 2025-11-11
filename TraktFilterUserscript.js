@@ -1,9 +1,10 @@
 // ==UserScript==
 // @name         Trakt.tv | Fake VIP + Filters
 // @description  Unlock VIP features, remove ads, persist filters, advanced filter presets with rename/delete
-// @version      1.0.0
+// @version      1.0.1
 // @namespace    https://github.com/MentalBlank/TraktFilterUserscript
 // @author       MentalBlank
+// @license      GPL-3.0-or-later
 // @match        *://trakt.tv/*
 // @run-at       document-start
 // @grant        unsafeWindow
@@ -14,7 +15,6 @@
 // ==/UserScript==
 
 'use strict';
-
 let $, compressedCache;
 
 // ------------------- Styles -------------------
@@ -56,10 +56,8 @@ document.addEventListener('turbo:load', async () => {
 
     saveFiltersFromCookies();
     await reapplyFilters();
-
     saveAdvancedFilters();
     await reapplyAdvancedFilters();
-
     renderPresets();
 });
 
@@ -86,6 +84,7 @@ function openDB() {
         req.onsuccess = () => resolve(req.result);
     });
 }
+
 async function setFilter(name, value) {
     const db = await openDB();
     const tx = db.transaction('filters', 'readwrite');
@@ -95,6 +94,7 @@ async function setFilter(name, value) {
         tx.onerror = () => reject(tx.error);
     });
 }
+
 async function getFilter(name) {
     const db = await openDB();
     return new Promise((resolve, reject) => {
@@ -104,6 +104,7 @@ async function getFilter(name) {
         req.onerror = () => reject(req.error);
     });
 }
+
 async function getAllFilters() {
     const db = await openDB();
     return new Promise((resolve, reject) => {
@@ -125,6 +126,7 @@ async function savePreset(name, params) {
         tx.onerror = () => reject(tx.error);
     });
 }
+
 async function getAllPresets() {
     const db = await openDB();
     return new Promise((resolve, reject) => {
@@ -134,6 +136,7 @@ async function getAllPresets() {
         req.onerror = () => reject(req.error);
     });
 }
+
 async function deletePreset(name) {
     const db = await openDB();
     const tx = db.transaction('presets', 'readwrite');
@@ -153,11 +156,9 @@ async function renderPresets() {
     nav.find('#filters-header, .filter-presets').remove();
 
     let savedState = localStorage.getItem('trakt_filters_collapsed') === 'true';
-
     const header = $(`<h3 id="filters-header" style="cursor:pointer; margin-top:10px;">FILTERS</h3>`);
     const container = $('<div class="filter-presets" style="margin:5px 0;"></div>');
     container.css('display', savedState ? 'none' : 'block');
-
     header.on('click', () => {
         container.slideToggle(150);
         localStorage.setItem('trakt_filters_collapsed', !container.is(':visible'));
@@ -169,7 +170,9 @@ async function renderPresets() {
         const name = prompt('Enter preset name:');
         if (!name) return;
 
-        const params = Object.fromEntries(new URLSearchParams(location.search).entries());
+        const params = Object.fromEntries(
+            [...new URLSearchParams(location.search).entries()].filter(([k]) => k !== 'page')
+        );
 
         const cookies = document.cookie.split(';');
         const cookieFilters = {};
@@ -184,6 +187,7 @@ async function renderPresets() {
         renderPresets();
         alert(`Preset "${name}" saved!`);
     });
+
     container.append(saveBtn);
 
     const currentParams = { ...Object.fromEntries(new URLSearchParams(location.search).entries()) };
@@ -242,8 +246,10 @@ function applyPreset(params) {
     });
 
     const url = new URL(location.href);
+
+    url.searchParams.delete('page');
     Object.entries(params).forEach(([k, v]) => {
-        if (!k.startsWith('filter-')) url.searchParams.set(k, v);
+        if (!k.startsWith('filter-') && k !== 'page') url.searchParams.set(k, v);
     });
 
     if (unsafeWindow.Turbo) {
@@ -262,6 +268,7 @@ function saveFiltersFromCookies() {
         if (name.trim().startsWith('filter-')) setFilter(name.trim(), value);
     });
 }
+
 async function reapplyFilters() {
     const filters = await getAllFilters();
     filters.forEach(f => {
@@ -275,9 +282,13 @@ async function reapplyFilters() {
 function saveAdvancedFilters() {
     const params = new URLSearchParams(location.search);
     if ([...params].length === 0) return;
+
+    params.delete('page');
+
     const filters = Object.fromEntries(params.entries());
     setFilter('advanced-filters', JSON.stringify(filters));
 }
+
 async function reapplyAdvancedFilters() {
     const advanced = await getFilter('advanced-filters');
     if (!advanced) return;
